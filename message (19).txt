@@ -1,7 +1,3 @@
--- ╔══════════════════════════════════════════════╗
--- ║   NOTZ HUB  V11 (RED THEME & FORCE UPDATE)  ║
--- ╚══════════════════════════════════════════════╝
-
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -10,339 +6,254 @@ local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 
 local lp = Players.LocalPlayer
-if not lp then
-    Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
-    lp = Players.LocalPlayer
-end
+if not lp then Players:GetPropertyChangedSignal("LocalPlayer"):Wait(); lp = Players.LocalPlayer end
+if not raknet then print("[NotzHub] raknet not found"); return end
 
-if not raknet then
-    print("Raknet not found!")
-    return
-end
-
-local POS_FILE = "notz_desync_v11_pos.json"
-
-local function saveUIPos(x, y)
-    pcall(writefile, POS_FILE, HttpService:JSONEncode({x = x, y = y}))
-end
-
-local function loadUIPos()
-    local ok, data = pcall(readfile, POS_FILE)
-    if ok and data then
-        local ok2, parsed = pcall(function() return HttpService:JSONDecode(data) end)
-        if ok2 and parsed and parsed.x and parsed.y then
-            return parsed.x, parsed.y
-        end
+-- ── Config persistente ──
+local CFG_FILE = "notzhub_desync_cfg.json"
+local cfg = { posX = 0.5, posY = 0.3, desyncEnabled = true }
+pcall(function()
+    if isfile and isfile(CFG_FILE) then
+        local d = HttpService:JSONDecode(readfile(CFG_FILE))
+        if d.posX then cfg.posX = d.posX end
+        if d.posY then cfg.posY = d.posY end
+        if d.desyncEnabled ~= nil then cfg.desyncEnabled = d.desyncEnabled end
     end
-    return nil, nil
+end)
+local function saveCfg()
+    pcall(function() if writefile then writefile(CFG_FILE, HttpService:JSONEncode(cfg)) end end)
 end
 
-local State = {
-    desync = false,
-    stealing = false,
-    timer = 0,
-    isDelaying = false,
-    desyncEnabled = true
-}
-
+local State = { desync=false, stealing=false, timer=0, isDelaying=false, desyncEnabled=cfg.desyncEnabled }
 local lastSafePos = nil
 
---// DESYNC HOOKS
+-- ── Hooks ──
 local function send_hook(packet)
-    if not State.stealing or not State.desync or not State.desyncEnabled then
-        return
-    end
+    if not State.stealing or not State.desync or not State.desyncEnabled then return end
     if packet.PacketId == 0x1B then
         local b = packet.AsBuffer
-        buffer.writeu32(b, 1, 0xFFFFFFFF)
-        buffer.writeu32(b, 5, 0xFFFFFFFF)
-        buffer.writeu32(b, 9, 0xFFFFFFFF)
+        buffer.writeu32(b,1,0xFFFFFFFF); buffer.writeu32(b,5,0xFFFFFFFF); buffer.writeu32(b,9,0xFFFFFFFF)
         packet:SetData(b)
     end
 end
-
 local function recv_hook(packet)
-    if not State.stealing or not State.desync or not State.desyncEnabled then
-        return
-    end
-    if packet.PacketId == 0x1B or packet.PacketId == 0x86 then
-        packet:Drop()
-    end
+    if not State.stealing or not State.desync or not State.desyncEnabled then return end
+    if packet.PacketId == 0x1B or packet.PacketId == 0x86 then packet:Drop() end
 end
-
 pcall(function()
     if raknet.add_send_hook then raknet.add_send_hook(send_hook) end
     if raknet.add_recv_hook then raknet.add_recv_hook(recv_hook) end
 end)
 
---// UI SETUP
-pcall(function()
-    local old = (gethui and gethui() or game.CoreGui):FindFirstChild("NotzHub_V11")
-    if old then old:Destroy() end
-end)
-
+-- ── UI (menor) ──
 local gui = Instance.new("ScreenGui")
-gui.Name = "NotzHub_V11"
-gui.ResetOnSpawn = false
+gui.Name = "NotzHub_V12"; gui.ResetOnSpawn = false
 gui.Parent = (gethui and gethui()) or game.CoreGui
 
-local savedX, savedY = loadUIPos()
-
-local main = Instance.new("Frame")
-main.Parent = gui
-main.BackgroundColor3 = Color3.fromRGB(15, 5, 5)
+local main = Instance.new("Frame", gui)
+main.BackgroundColor3 = Color3.fromRGB(12,4,4)
 main.BorderSizePixel = 0
-main.Size = UDim2.new(0, 195, 0, 260)
-main.Position = savedX and UDim2.new(0, savedX, 0, savedY) or UDim2.new(0.5, -97, 0.3, 0)
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
-local mainStroke = Instance.new("UIStroke", main)
-mainStroke.Color = Color3.fromRGB(255, 40, 40)
-mainStroke.Thickness = 1.5
+main.Position = UDim2.new(cfg.posX,-100,cfg.posY,0)
+main.Size = UDim2.new(0,200,0,210)
+Instance.new("UICorner",main).CornerRadius = UDim.new(0,12)
+local ms = Instance.new("UIStroke",main); ms.Color=Color3.fromRGB(200,30,30); ms.Thickness=1.5
 
 -- Header
-local header = Instance.new("Frame", main)
-header.Size = UDim2.new(1, 0, 0, 44)
-header.BackgroundTransparency = 1
+local header = Instance.new("Frame",main)
+header.Size=UDim2.new(1,0,0,44); header.BackgroundTransparency=1
 
-local icon = Instance.new("Frame", header)
-icon.Size = UDim2.new(0, 30, 0, 30)
-icon.Position = UDim2.new(0, 10, 0, 7)
-icon.BackgroundColor3 = Color3.fromRGB(40, 10, 10)
-Instance.new("UICorner", icon).CornerRadius = UDim.new(0, 6)
-local iconText = Instance.new("TextLabel", icon)
-iconText.Size = UDim2.new(1, 0, 1, 0)
-iconText.Text = "N"
-iconText.TextColor3 = Color3.fromRGB(255, 70, 70)
-iconText.Font = Enum.Font.GothamBlack
-iconText.TextSize = 18
-iconText.BackgroundTransparency = 1
+local iconF = Instance.new("Frame",header)
+iconF.Size=UDim2.new(0,30,0,30); iconF.Position=UDim2.new(0,10,0,7)
+iconF.BackgroundColor3=Color3.fromRGB(35,8,8)
+Instance.new("UICorner",iconF).CornerRadius=UDim.new(0,6)
+local iconL = Instance.new("TextLabel",iconF)
+iconL.Size=UDim2.new(1,0,1,0); iconL.Text="N"; iconL.TextColor3=Color3.fromRGB(255,60,60)
+iconL.Font=Enum.Font.GothamBlack; iconL.TextSize=18; iconL.BackgroundTransparency=1
 
-local title = Instance.new("TextLabel", header)
-title.Text = "NOTZ HUB"
-title.Position = UDim2.new(0, 48, 0, 8)
-title.Size = UDim2.new(0, 80, 0, 16)
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 13
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.BackgroundTransparency = 1
+local titleL = Instance.new("TextLabel",header)
+titleL.Text="NOTZ HUB"; titleL.Position=UDim2.new(0,48,0,7)
+titleL.Size=UDim2.new(0,90,0,16); titleL.TextColor3=Color3.fromRGB(255,255,255)
+titleL.Font=Enum.Font.GothamBold; titleL.TextSize=13; titleL.TextXAlignment=Enum.TextXAlignment.Left
+titleL.BackgroundTransparency=1
 
-local subTitle = Instance.new("TextLabel", header)
-subTitle.Text = "Desync V11"
-subTitle.Position = UDim2.new(0, 48, 0, 24)
-subTitle.Size = UDim2.new(0, 80, 0, 12)
-subTitle.TextColor3 = Color3.fromRGB(150, 100, 100)
-subTitle.Font = Enum.Font.Gotham
-subTitle.TextSize = 10
-subTitle.TextXAlignment = Enum.TextXAlignment.Left
-subTitle.BackgroundTransparency = 1
+local subL = Instance.new("TextLabel",header)
+subL.Text="Desync V12"; subL.Position=UDim2.new(0,48,0,22)
+subL.Size=UDim2.new(0,90,0,12); subL.TextColor3=Color3.fromRGB(140,80,80)
+subL.Font=Enum.Font.Gotham; subL.TextSize=10; subL.TextXAlignment=Enum.TextXAlignment.Left
+subL.BackgroundTransparency=1
 
--- Status Section
-local statusBox = Instance.new("Frame", main)
-statusBox.Size = UDim2.new(0.9, 0, 0, 40)
-statusBox.Position = UDim2.new(0.05, 0, 0, 50)
-statusBox.BackgroundColor3 = Color3.fromRGB(25, 10, 10)
-Instance.new("UICorner", statusBox).CornerRadius = UDim.new(0, 7)
-Instance.new("UIStroke", statusBox).Color = Color3.fromRGB(80, 30, 30)
+-- Status box
+local sBox = Instance.new("Frame",main)
+sBox.Size=UDim2.new(0.9,0,0,38); sBox.Position=UDim2.new(0.05,0,0,50)
+sBox.BackgroundColor3=Color3.fromRGB(20,8,8)
+Instance.new("UICorner",sBox).CornerRadius=UDim.new(0,7)
+Instance.new("UIStroke",sBox).Color=Color3.fromRGB(60,25,25)
 
-local nextRollbackLabel = Instance.new("TextLabel", statusBox)
-nextRollbackLabel.Text = "ROLLBACK"
-nextRollbackLabel.Position = UDim2.new(0, 8, 0, 10)
-nextRollbackLabel.Size = UDim2.new(0, 70, 0, 18)
-nextRollbackLabel.TextColor3 = Color3.fromRGB(180, 150, 150)
-nextRollbackLabel.Font = Enum.Font.GothamBold
-nextRollbackLabel.TextSize = 9
-nextRollbackLabel.TextXAlignment = Enum.TextXAlignment.Left
-nextRollbackLabel.BackgroundTransparency = 1
+local nextL = Instance.new("TextLabel",sBox)
+nextL.Text="NEXT ROLLBACK"; nextL.Position=UDim2.new(0,8,0,10)
+nextL.Size=UDim2.new(0,85,0,16); nextL.TextColor3=Color3.fromRGB(160,120,120)
+nextL.Font=Enum.Font.GothamBold; nextL.TextSize=9; nextL.TextXAlignment=Enum.TextXAlignment.Left
+nextL.BackgroundTransparency=1
 
-local statusText = Instance.new("TextLabel", statusBox)
-statusText.Text = "Waiting..."
-statusText.Position = UDim2.new(0.4, 0, 0, 10)
-statusText.Size = UDim2.new(0.55, 0, 0, 18)
-statusText.TextColor3 = Color3.fromRGB(255, 255, 255)
-statusText.Font = Enum.Font.GothamBlack
-statusText.TextSize = 15
-statusText.TextXAlignment = Enum.TextXAlignment.Right
-statusText.BackgroundTransparency = 1
+local statusText = Instance.new("TextLabel",sBox)
+statusText.Text="Waiting..."; statusText.Position=UDim2.new(0.5,0,0,8)
+statusText.Size=UDim2.new(0.48,0,0,22); statusText.TextColor3=Color3.fromRGB(255,255,255)
+statusText.Font=Enum.Font.GothamBlack; statusText.TextSize=15
+statusText.TextXAlignment=Enum.TextXAlignment.Right; statusText.BackgroundTransparency=1
 
--- Info Label
-local infoLabel = Instance.new("TextLabel", main)
-infoLabel.Size = UDim2.new(0.9, 0, 0, 30)
-infoLabel.Position = UDim2.new(0.05, 0, 0, 98)
-infoLabel.BackgroundColor3 = Color3.fromRGB(25, 10, 10)
-infoLabel.Text = "Auto when holding brainrot"
-infoLabel.TextColor3 = Color3.fromRGB(150, 120, 120)
-infoLabel.Font = Enum.Font.Gotham
-infoLabel.TextSize = 10
-Instance.new("UICorner", infoLabel).CornerRadius = UDim.new(0, 7)
-Instance.new("UIStroke", infoLabel).Color = Color3.fromRGB(80, 30, 30)
+-- Info
+local infoL = Instance.new("TextLabel",main)
+infoL.Size=UDim2.new(0.9,0,0,28); infoL.Position=UDim2.new(0.05,0,0,96)
+infoL.BackgroundColor3=Color3.fromRGB(20,8,8)
+infoL.Text="Auto-ativa ao pegar brainrot"; infoL.TextColor3=Color3.fromRGB(160,120,120)
+infoL.Font=Enum.Font.Gotham; infoL.TextSize=10
+Instance.new("UICorner",infoL).CornerRadius=UDim.new(0,7)
+Instance.new("UIStroke",infoL).Color=Color3.fromRGB(60,25,25)
 
--- Manual Rollback Button
-local manualBtn = Instance.new("TextButton", main)
-manualBtn.Size = UDim2.new(0.9, 0, 0, 35)
-manualBtn.Position = UDim2.new(0.05, 0, 0, 138)
-manualBtn.BackgroundColor3 = Color3.fromRGB(40, 15, 15)
-manualBtn.Text = "⏪ ROLLBACK (R)"
-manualBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-manualBtn.Font = Enum.Font.GothamBold
-manualBtn.TextSize = 11
-Instance.new("UICorner", manualBtn).CornerRadius = UDim.new(0, 7)
-Instance.new("UIStroke", manualBtn).Color = Color3.fromRGB(255, 40, 40)
+-- Manual Rollback
+local manualBtn = Instance.new("TextButton",main)
+manualBtn.Size=UDim2.new(0.9,0,0,34); manualBtn.Position=UDim2.new(0.05,0,0,133)
+manualBtn.BackgroundColor3=Color3.fromRGB(30,10,10)
+manualBtn.Text="⏪ ROLLBACK (R)"; manualBtn.TextColor3=Color3.fromRGB(255,90,90)
+manualBtn.Font=Enum.Font.GothamBold; manualBtn.TextSize=12
+Instance.new("UICorner",manualBtn).CornerRadius=UDim.new(0,7)
+Instance.new("UIStroke",manualBtn).Color=Color3.fromRGB(200,30,30)
 
--- Desync Toggle Button
-local desyncToggleBtn = Instance.new("TextButton", main)
-desyncToggleBtn.Size = UDim2.new(0.9, 0, 0, 35)
-desyncToggleBtn.Position = UDim2.new(0.05, 0, 0, 182)
-desyncToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 15, 15)
-desyncToggleBtn.Text = "DESYNC: ON"
-desyncToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 100)
-desyncToggleBtn.Font = Enum.Font.GothamBold
-desyncToggleBtn.TextSize = 11
-Instance.new("UICorner", desyncToggleBtn).CornerRadius = UDim.new(0, 7)
-local desyncToggleStroke = Instance.new("UIStroke", desyncToggleBtn)
-desyncToggleStroke.Color = Color3.fromRGB(0, 255, 100)
+-- Desync Toggle
+local toggleBtn = Instance.new("TextButton",main)
+toggleBtn.Size=UDim2.new(0.9,0,0,34); toggleBtn.Position=UDim2.new(0.05,0,0,172)
+toggleBtn.BackgroundColor3=Color3.fromRGB(30,10,10)
+toggleBtn.Font=Enum.Font.GothamBold; toggleBtn.TextSize=12
+Instance.new("UICorner",toggleBtn).CornerRadius=UDim.new(0,7)
+local toggleStroke = Instance.new("UIStroke",toggleBtn); toggleStroke.Thickness=1.5
 
--- Footer
-local footer = Instance.new("TextLabel", main)
-footer.Size = UDim2.new(0.9, 0, 0, 14)
-footer.Position = UDim2.new(0.05, 0, 1, -22)
-footer.BackgroundTransparency = 1
-footer.Text = "5s cycle • force update"
-footer.TextColor3 = Color3.fromRGB(60, 30, 30)
-footer.Font = Enum.Font.Gotham
-footer.TextSize = 9
+local function updateToggleUI()
+    if State.desyncEnabled then
+        toggleBtn.Text="DESYNC: ON"; toggleBtn.TextColor3=Color3.fromRGB(0,230,90)
+        toggleStroke.Color=Color3.fromRGB(0,200,80)
+    else
+        toggleBtn.Text="DESYNC: OFF"; toggleBtn.TextColor3=Color3.fromRGB(255,40,40)
+        toggleStroke.Color=Color3.fromRGB(200,30,30)
+    end
+end
+updateToggleUI()
 
---// CORE LOGIC (10 seconds)
+-- ── Rollback ──
+local function doRollback()
+    if lastSafePos and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+        lp.Character.HumanoidRootPart.CFrame = CFrame.new(lastSafePos)
+    end
+end
+
+-- ── Main loop ──
 task.spawn(function()
     while true do
         local isStealing = lp:GetAttribute("Stealing") == true
 
         if isStealing and not State.isDelaying and State.desyncEnabled then
-            State.isDelaying = true
-            State.stealing = true
-            State.desync = true
-
-            if lastSafePos and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                lp.Character.HumanoidRootPart.CFrame = CFrame.new(lastSafePos)
-            end
-
+            State.isDelaying = true; State.stealing = true; State.desync = true
+            doRollback()
             State.timer = 5
-            local blinkState = true
-
+            local blink = true
             while State.timer > 0 and lp:GetAttribute("Stealing") == true and State.desyncEnabled do
                 statusText.Text = string.format("%.1fs", State.timer)
-
                 if State.timer > 2 then
-                    statusText.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    statusText.Visible = true
+                    statusText.TextColor3 = Color3.fromRGB(255,255,255); statusText.Visible = true
                 else
-                    statusText.TextColor3 = Color3.fromRGB(255, 40, 40)
-                    blinkState = not blinkState
-                    statusText.Visible = blinkState
+                    statusText.TextColor3 = Color3.fromRGB(255,40,40)
+                    blink = not blink; statusText.Visible = blink
                 end
-
-                task.wait(0.1)
-                State.timer = State.timer - 0.1
+                task.wait(0.1); State.timer -= 0.1
             end
-
             statusText.Visible = true
-
             if lp:GetAttribute("Stealing") == true and State.desyncEnabled then
                 State.desync = false
-                statusText.Text = "Syncing..."
-                statusText.TextColor3 = Color3.fromRGB(0, 255, 100)
-
+                statusText.Text = "Syncing..."; statusText.TextColor3 = Color3.fromRGB(0,230,90)
                 local char = lp.Character
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
                 if hrp then
-                    local currentPos = hrp.CFrame
-                    hrp.CFrame = currentPos * CFrame.new(0, 1000, 0)
-                    task.wait(0.05)
-                    hrp.CFrame = currentPos
+                    local cur = hrp.CFrame
+                    hrp.CFrame = cur * CFrame.new(0,1000,0)
+                    task.wait(0.05); hrp.CFrame = cur
                 end
-
-                task.wait(0.15)
-                State.desync = true
+                task.wait(0.15); State.desync = true
             end
-
             State.isDelaying = false
         elseif not isStealing or not State.desyncEnabled then
-            State.stealing = false
-            State.desync = false
-            State.isDelaying = false
+            State.stealing = false; State.desync = false; State.isDelaying = false
             statusText.Text = State.desyncEnabled and "Waiting..." or "DISABLED"
-            statusText.TextColor3 = State.desyncEnabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 40, 40)
+            statusText.TextColor3 = State.desyncEnabled and Color3.fromRGB(255,255,255) or Color3.fromRGB(255,40,40)
             statusText.Visible = true
         end
-
         task.wait(0.1)
     end
 end)
 
---// POSITION SAVER
+-- ── Detecta pegar brainrot na mão → rollback ──
+task.spawn(function()
+    local lastToolName = nil
+    while true do
+        local char = lp.Character
+        if char then
+            local tool = char:FindFirstChildOfClass("Tool")
+            local toolName = tool and tool.Name or nil
+            -- Se pegou uma tool nova (brainrot) faz rollback
+            if toolName and toolName ~= lastToolName and toolName ~= "Flying Carpet" then
+                if lastSafePos then
+                    task.wait(0.05)
+                    doRollback()
+                end
+            end
+            lastToolName = toolName
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- ── Position saver ──
 task.spawn(function()
     while true do
         local char = lp.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            if not State.stealing or not State.desync then
-                lastSafePos = hrp.Position
-            end
+        if hrp and (not State.stealing or not State.desync) then
+            lastSafePos = hrp.Position
         end
         task.wait(0.1)
     end
 end)
 
---// MANUAL ROLLBACK (R)
+-- ── Inputs ──
 UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-    if input.KeyCode == Enum.KeyCode.R then
-        if lastSafePos and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-            lp.Character.HumanoidRootPart.CFrame = CFrame.new(lastSafePos)
-        end
-    end
+    if input.KeyCode == Enum.KeyCode.R then doRollback() end
 end)
-
-manualBtn.MouseButton1Click:Connect(function()
-    if lastSafePos and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-        lp.Character.HumanoidRootPart.CFrame = CFrame.new(lastSafePos)
-    end
-end)
-
---// DESYNC TOGGLE
-desyncToggleBtn.MouseButton1Click:Connect(function()
+manualBtn.MouseButton1Click:Connect(doRollback)
+toggleBtn.MouseButton1Click:Connect(function()
     State.desyncEnabled = not State.desyncEnabled
-    if State.desyncEnabled then
-        desyncToggleBtn.Text = "DESYNC: ON"
-        desyncToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 100)
-        desyncToggleStroke.Color = Color3.fromRGB(0, 255, 100)
-    else
-        desyncToggleBtn.Text = "DESYNC: OFF"
-        desyncToggleBtn.TextColor3 = Color3.fromRGB(255, 40, 40)
-        desyncToggleStroke.Color = Color3.fromRGB(255, 40, 40)
-        State.desync = false
-        State.stealing = false
-    end
+    cfg.desyncEnabled = State.desyncEnabled
+    if not State.desyncEnabled then State.desync=false; State.stealing=false end
+    updateToggleUI(); saveCfg()
 end)
 
---// DRAG + SAVE POSITION
+-- ── Drag + save pos ──
 local dragging, dragStart, startPos
-main.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true; dragStart = input.Position; startPos = main.Position
+main.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+        dragging=true; dragStart=i.Position; startPos=main.Position
     end
 end)
-UIS.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStart
-        main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+UIS.InputChanged:Connect(function(i)
+    if dragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+        local d=i.Position-dragStart
+        main.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y)
     end
 end)
-UIS.InputEnded:Connect(function(input)
-    if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and dragging then
-        dragging = false
-        saveUIPos(main.Position.X.Offset, main.Position.Y.Offset)
+UIS.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+        dragging=false
+        cfg.posX=main.Position.X.Scale; cfg.posY=main.Position.Y.Scale
+        saveCfg()
     end
 end)
 
-print("[Notz Hub V11] Loaded - 5s cycle, position saved")
+print("[NotzHub V12] Loaded")
