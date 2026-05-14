@@ -11,7 +11,7 @@ if not raknet then print("[NotzHub] raknet not found"); return end
 
 -- ── Config persistente ──
 local CFG_FILE = "notzhub_desync_cfg.json"
-local cfg = { posX = 0.5, posY = 0.3, desyncEnabled = true }
+local cfg = { posX = nil, posY = nil, desyncEnabled = true }
 pcall(function()
     if isfile and isfile(CFG_FILE) then
         local d = HttpService:JSONDecode(readfile(CFG_FILE))
@@ -45,7 +45,12 @@ pcall(function()
     if raknet.add_recv_hook then raknet.add_recv_hook(recv_hook) end
 end)
 
--- ── UI (menor) ──
+-- ── UI ──
+pcall(function()
+    local old = (gethui and gethui() or game.CoreGui):FindFirstChild("NotzHub_V12")
+    if old then old:Destroy() end
+end)
+
 local gui = Instance.new("ScreenGui")
 gui.Name = "NotzHub_V12"; gui.ResetOnSpawn = false
 gui.Parent = (gethui and gethui()) or game.CoreGui
@@ -53,8 +58,8 @@ gui.Parent = (gethui and gethui()) or game.CoreGui
 local main = Instance.new("Frame", gui)
 main.BackgroundColor3 = Color3.fromRGB(12,4,4)
 main.BorderSizePixel = 0
-main.Position = UDim2.new(cfg.posX,-100,cfg.posY,0)
 main.Size = UDim2.new(0,200,0,210)
+main.Position = cfg.posX and UDim2.new(0, cfg.posX, 0, cfg.posY) or UDim2.new(0.5, -100, 0.3, 0)
 Instance.new("UICorner",main).CornerRadius = UDim.new(0,12)
 local ms = Instance.new("UIStroke",main); ms.Color=Color3.fromRGB(200,30,30); ms.Thickness=1.5
 
@@ -151,8 +156,12 @@ task.spawn(function()
         local isStealing = lp:GetAttribute("Stealing") == true
 
         if isStealing and not State.isDelaying and State.desyncEnabled then
-            State.isDelaying = true; State.stealing = true; State.desync = true
+            State.isDelaying = true; State.stealing = true
+
             doRollback()
+            task.wait(0.1)
+            State.desync = true
+
             State.timer = 5
             local blink = true
             while State.timer > 0 and lp:GetAttribute("Stealing") == true and State.desyncEnabled do
@@ -197,7 +206,6 @@ task.spawn(function()
         if char then
             local tool = char:FindFirstChildOfClass("Tool")
             local toolName = tool and tool.Name or nil
-            -- Se pegou uma tool nova (brainrot) faz rollback
             if toolName and toolName ~= lastToolName and toolName ~= "Flying Carpet" then
                 if lastSafePos then
                     task.wait(0.05)
@@ -249,9 +257,9 @@ UIS.InputChanged:Connect(function(i)
     end
 end)
 UIS.InputEnded:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+    if (i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch) and dragging then
         dragging=false
-        cfg.posX=main.Position.X.Scale; cfg.posY=main.Position.Y.Scale
+        cfg.posX=main.Position.X.Offset; cfg.posY=main.Position.Y.Offset
         saveCfg()
     end
 end)
