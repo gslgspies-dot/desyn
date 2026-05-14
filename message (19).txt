@@ -33,21 +33,55 @@ local bindingMode  = false            -- aguardando tecla nova
 local MainFont = Enum.Font.Gotham
 local BoldFont = Enum.Font.GothamBold
 
+local main
+
 -- ════════════════════════════════════
 --  CONFIG  (salva posição + cor + bind)
 -- ════════════════════════════════════
 local CFG_FILE = "NotzHub_V17_Config.json"
 
+local function GetCurrentPos()
+    if main then
+        return {
+            X = {
+                Scale = main.Position.X.Scale,
+                Offset = main.Position.X.Offset
+            },
+            Y = {
+                Scale = main.Position.Y.Scale,
+                Offset = main.Position.Y.Offset
+            }
+        }
+    end
+
+    return {
+        X = {Scale = 0.5, Offset = -95},
+        Y = {Scale = 0.3, Offset = 0}
+    }
+end
+
 local function SaveConfig()
+    if not writefile then
+        return
+    end
+
+    local pos = GetCurrentPos()
+
+    local data = {
+        X = pos.X,
+        Y = pos.Y,
+
+        Color = {
+            R = State.uiColor.R,
+            G = State.uiColor.G,
+            B = State.uiColor.B
+        },
+
+        Key = rollbackKey.Name
+    }
+
     pcall(function()
-        writefile(CFG_FILE, HttpService:JSONEncode({
-            X     = { Scale = main and main.Position.X.Scale or 0.5,
-                      Offset = main and main.Position.X.Offset or -95 },
-            Y     = { Scale = main and main.Position.Y.Scale or 0.3,
-                      Offset = main and main.Position.Y.Offset or 0 },
-            Color = { R = State.uiColor.R, G = State.uiColor.G, B = State.uiColor.B },
-            Key   = rollbackKey.Name,
-        }))
+        writefile(CFG_FILE, HttpService:JSONEncode(data))
     end)
 end
 
@@ -116,7 +150,7 @@ gui.Name = "NotzHub_V17"; gui.ResetOnSpawn = false
 gui.Parent = (gethui and gethui()) or game.CoreGui
 
 -- Janela
-local main = Instance.new("Frame", gui)
+main = Instance.new("Frame", gui)
 main.Size              = UDim2.new(0, 190, 0, 285)
 main.Position          = savedPos
 main.BackgroundColor3  = Color3.fromRGB(12, 12, 12)
@@ -422,3 +456,8 @@ UIS.InputEnded:Connect(function(i)
 end)
 
 print("[Notz Hub V17] Carregado - Desync ativo, bind: " .. rollbackKey.Name)
+
+
+game:BindToClose(function()
+    SaveConfig()
+end)
